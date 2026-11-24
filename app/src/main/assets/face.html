@@ -200,8 +200,9 @@ async function carregarCerebro() {
   try {
     status('Baixando o cerebro (uns 400 MB, so na primeira vez)...');
     tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5');
+    tf.env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/';
     let ultimoErro = null;
-    for (const proxy of [true, false]) {
+    for (const proxy of [false, true]) {
       try {
         tf.env.backends.onnx.wasm.proxy = proxy;
         gerador = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
