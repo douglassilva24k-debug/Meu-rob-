@@ -26,16 +26,10 @@
   .amor .olho { background:#f36; clip-path: polygon(50% 100%,0 35%,15% 5%,50% 25%,85% 5%,100% 35%); border-radius:0; }
   .pensando .olho { height:20vmin; }
   .pensando #stage { transform: translate(-4vmin,-3vmin); }
+  .ouvindo .olho { box-shadow: 0 0 3vmin #4af; }
   .falando #boca { opacity:1; animation: fala .25s infinite alternate; }
   @keyframes fala { from{ height:2vmin } to{ height:8vmin } }
-
-  #hud { position:absolute; left:0; right:0; bottom:0; padding:8px; display:none; }
-  body.cheia #hud { display:block; }
-  #status { color:#8f8; font-size:12px; text-align:center; min-height:16px; }
-  #linha { display:flex; gap:6px; margin-top:4px; }
-  #txt { flex:1; padding:10px; border-radius:8px; border:1px solid #444; background:#1c1c1c; color:#eee; font-size:14px; }
-  #hud button { padding:10px 14px; border:0; border-radius:8px; background:#2d8cff; color:#fff; font-size:14px; }
-  #mic.ouvindo { background:#e33; }
+  #status { position:absolute; left:0; right:0; bottom:4px; text-align:center; color:#6c6; font-size:11px; opacity:.8; pointer-events:none; }
 </style>
 </head>
 <body class="tela">
@@ -46,15 +40,7 @@
 <div id="boca"></div>
 <div class="lagrima" style="left:30%"></div>
 <div class="lagrima" style="left:62%"></div>
-
-<div id="hud">
-  <div id="status"></div>
-  <div id="linha">
-    <input id="txt" placeholder="Escreva aqui para conversar...">
-    <button id="enviar">Enviar</button>
-    <button id="mic">Falar</button>
-  </div>
-</div>
+<div id="status"></div>
 
 <script>
 // ================= EXPRESSOES E ANIMACAO =================
@@ -69,52 +55,48 @@ function expressao(nome) {
 }
 function olhar(x, y) { stage.style.transform = 'translate(' + x + 'vmin,' + y + 'vmin)'; }
 function fundo(comFundo) { b.classList.toggle('tela', comFundo); }
-
 function piscar() {
   if (atual === 'dormindo') return;
   b.classList.add('piscando');
   setTimeout(() => b.classList.remove('piscando'), 140);
 }
 setInterval(() => { if (Math.random() < 0.7) piscar(); }, 3200);
-
 setInterval(() => {
   if (ocupado || atual === 'dormindo' || atual === 'chorando') return;
   olhar(Math.random() * 12 - 6, Math.random() * 6 - 3);
   setTimeout(() => { if (!ocupado) olhar(0, 0); }, 1400);
 }, 5000);
-
 function carinho() {
   if (ocupado) return;
   expressao('feliz');
   clearTimeout(timerCarinho);
   timerCarinho = setTimeout(() => expressao('neutro'), 3000);
 }
-document.getElementById('stage').addEventListener('click', carinho);
-
-// ================= MODO: TELA CHEIA OU FLUTUANTE =================
-// A bolinha flutuante e pequena. Na tela cheia mostramos o painel de conversa.
-const ehFlutuante = (window.innerWidth < 500 && window.innerHeight < 400);
-if (!ehFlutuante) b.classList.add('cheia');
 
 const statusEl = document.getElementById('status');
 function status(t) { statusEl.textContent = t; }
+const ehFlutuante = (window.innerWidth < 500 && window.innerHeight < 400);
+
+// ================= NOME DO ROBO =================
+let nomeRobo = localStorage.getItem('nomeRobo') || '';
+
+function tirarAcentos(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
 // ================= VOZ (KOKORO) =================
-let tts = null, audioCtx = null, vozPronta = false;
+let tts = null, vozPronta = false;
 
 async function carregarVoz() {
   try {
     status('Baixando a voz... (so na primeira vez)');
     const { KokoroTTS } = await import('https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm');
-    const usaGpu = !!navigator.gpu;
     tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
-      dtype: usaGpu ? 'fp32' : 'q8',
-      device: usaGpu ? 'webgpu' : 'wasm'
+      dtype: 'q8',
+      device: 'wasm'
     });
     vozPronta = true;
   } catch (e) {
     console.log(e);
-    status('Voz natural indisponivel neste aparelho. Usando a voz do Android.');
+    status('Voz natural indisponivel (' + (e.message || e) + '). Usando a voz do Android.');
   }
 }
 
@@ -130,12 +112,12 @@ function vozPadrao(texto) {
 }
 
 async function falar(texto) {
+  pararEscuta();
   expressao('falando');
   try {
     if (vozPronta) {
       const audio = await tts.generate(texto, { voice: 'pm_alex' });
-      const blob = audio.toBlob();
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(audio.toBlob());
       const el = new Audio(url);
       await new Promise(res => { el.onended = res; el.onerror = res; el.play().catch(res); });
       URL.revokeObjectURL(url);
@@ -144,82 +126,151 @@ async function falar(texto) {
     }
   } catch (e) { console.log(e); }
   expressao('neutro');
+  iniciarEscuta();
 }
 
-// ================= CEREBRO (WEBLLM) =================
-let engine = null, cerebroPronto = false;
-const MODELO = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
-const historico = [{
-  role: 'system',
-  content: 'Voce e um robozinho virtual, amigo do Douglas. Fale sempre em portugues do Brasil, de forma curta, calorosa e natural, em no maximo duas frases. Voce nao sabe noticias nem fatos recentes, e diz isso com honestidade quando perguntarem. No comeco de cada resposta, escreva entre colchetes UMA emocao entre: feliz, triste, surpreso, bravo, amor, neutro. Exemplo: [feliz] Que legal te ver!'
-}];
+// ================= CEREBRO (TRANSFORMERS.JS, PROCESSADOR) =================
+let gerador = null, cerebroPronto = false;
+let historico = [];
+
+function promptSistema() {
+  return 'Voce e um robozinho virtual chamado ' + nomeRobo + ', amigo do Douglas. Fale sempre em portugues do Brasil, de forma curta, calorosa e natural, em no maximo duas frases curtas. Voce nao sabe noticias nem fatos recentes, e diz isso com honestidade. No comeco de cada resposta escreva entre colchetes UMA emocao entre: feliz, triste, surpreso, bravo, amor, neutro. Exemplo: [feliz] Que legal te ver!';
+}
 
 async function carregarCerebro() {
   try {
-    if (!navigator.gpu) throw new Error('sem WebGPU');
     status('Baixando o cerebro... (so na primeira vez, pode demorar)');
-    const webllm = await import('https://esm.run/@mlc-ai/web-llm');
-    engine = await webllm.CreateMLCEngine(MODELO, {
-      initProgressCallback: p => status('Cerebro: ' + Math.round((p.progress || 0) * 100) + '%')
+    const tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5');
+    gerador = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
+      dtype: 'q4',
+      device: 'wasm',
+      progress_callback: p => { if (p.status === 'progress') status('Cerebro: ' + Math.round(p.progress || 0) + '%'); }
     });
     cerebroPronto = true;
-    status('Pronto! Pode conversar.');
+    status('');
   } catch (e) {
     console.log(e);
-    status('Este aparelho nao roda a inteligencia aqui (' + (e.message || e) + ').');
+    status('Cerebro nao carregou (' + (e.message || e) + ')');
   }
 }
 
-async function conversar(texto) {
-  if (!texto || ocupado) return;
-  if (!cerebroPronto) { status('O cerebro ainda nao esta pronto neste aparelho.'); return; }
+async function pensar(textoUsuario) {
+  if (!historico.length || historico[0].role !== 'system') historico.unshift({ role: 'system', content: promptSistema() });
+  historico.push({ role: 'user', content: textoUsuario });
+  const saida = await gerador(historico, { max_new_tokens: 80, temperature: 0.8, do_sample: true });
+  const msgs = saida[0].generated_text;
+  let resposta = (msgs[msgs.length - 1].content || '').trim();
+  historico.push({ role: 'assistant', content: resposta });
+  if (historico.length > 13) historico.splice(1, 2);
+  return resposta;
+}
+
+// ================= CONVERSA =================
+async function tratarFala(frase) {
+  if (ocupado) return;
+  const limpa = frase.trim();
+  if (!limpa) return;
+
+  // Fase 1: ainda nao tem nome. A primeira fala e o nome escolhido.
+  if (!nomeRobo) {
+    ocupado = true;
+    let nome = limpa.replace(/[.,!?]/g, '').replace(/^(pode me chamar de|pode te chamar de|te chamar de|seu nome e|seu nome é|vou te chamar de|chamo voce de|chamo você de|o nome e|o nome é|se chama|chama)\s+/i, '').trim();
+    nome = nome.split(' ').slice(0, 2).join(' ');
+    nome = nome.charAt(0).toUpperCase() + nome.slice(1);
+    nomeRobo = nome;
+    localStorage.setItem('nomeRobo', nomeRobo);
+    expressao('feliz');
+    await falar('Gostei! Pode me chamar de ' + nomeRobo + '. Quando quiser falar comigo, comece dizendo meu nome.');
+    ocupado = false;
+    return;
+  }
+
+  // Fase 2: so responde se a frase comecar com o nome dele.
+  const norm = tirarAcentos(limpa);
+  const nomeNorm = tirarAcentos(nomeRobo);
+  const idx = norm.indexOf(nomeNorm);
+  if (idx < 0 || idx > 12) return;
+  let pergunta = limpa.slice(idx + nomeRobo.length).replace(/^[\s,.:!?-]+/, '');
+  if (!pergunta) pergunta = 'Oi!';
+
   ocupado = true;
+  pararEscuta();
   expressao('pensando');
   status('Pensando...');
-  historico.push({ role: 'user', content: texto });
   try {
-    const r = await engine.chat.completions.create({ messages: historico, temperature: 0.8, max_tokens: 120 });
-    let resposta = (r.choices[0].message.content || '').trim();
-    historico.push({ role: 'assistant', content: resposta });
-    if (historico.length > 14) historico.splice(1, 2);
+    let resposta = await pensar(pergunta);
     let emocao = 'neutro';
     const m = resposta.match(/^\s*\[(\w+)\]\s*/);
     if (m) { emocao = m[1].toLowerCase(); resposta = resposta.replace(m[0], ''); }
     status('');
-    if (estados.indexOf(emocao) >= 0) expressao(emocao);
+    if (estados.indexOf(emocao) >= 0 && emocao !== 'neutro') expressao(emocao);
     await falar(resposta);
   } catch (e) {
     console.log(e);
-    status('Erro ao pensar: ' + (e.message || e));
+    status('Erro ao pensar (' + (e.message || e) + ')');
     expressao('triste');
+    iniciarEscuta();
   }
   ocupado = false;
 }
 
-// ================= ENTRADA: TEXTO E MICROFONE =================
-const txt = document.getElementById('txt');
-document.getElementById('enviar').onclick = () => { const t = txt.value.trim(); txt.value = ''; conversar(t); };
-txt.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('enviar').click(); });
-
-const micBtn = document.getElementById('mic');
+// ================= ESCUTA CONTINUA =================
 const Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (!Reconhecimento) {
-  micBtn.style.display = 'none';
-} else {
-  const rec = new Reconhecimento();
+let rec = null, escutando = false, querEscutar = false;
+
+function iniciarEscuta() {
+  querEscutar = true;
+  if (!rec || escutando) return;
+  try { rec.start(); } catch (e) {}
+}
+function pararEscuta() {
+  querEscutar = false;
+  if (rec && escutando) { try { rec.stop(); } catch (e) {} }
+}
+
+if (Reconhecimento) {
+  rec = new Reconhecimento();
   rec.lang = 'pt-BR';
+  rec.continuous = false;
   rec.interimResults = false;
-  rec.onresult = e => conversar(e.results[0][0].transcript);
-  rec.onend = () => micBtn.classList.remove('ouvindo');
-  rec.onerror = () => { micBtn.classList.remove('ouvindo'); status('Nao consegui ouvir. Tente digitar.'); };
-  micBtn.onclick = () => { try { rec.start(); micBtn.classList.add('ouvindo'); status('Ouvindo...'); } catch (e) {} };
+  rec.onstart = () => { escutando = true; b.classList.add('ouvindo'); };
+  rec.onend = () => {
+    escutando = false; b.classList.remove('ouvindo');
+    if (querEscutar) setTimeout(() => { try { rec.start(); } catch (e) {} }, 300);
+  };
+  rec.onerror = () => {};
+  rec.onresult = e => tratarFala(e.results[0][0].transcript);
+} else {
+  status('Este aparelho nao tem reconhecimento de voz no navegador.');
 }
 
 // ================= INICIO =================
-// So carrega voz e cerebro na tela cheia, para a bolinha flutuante ficar leve.
-if (!ehFlutuante) {
-  carregarVoz().then(carregarCerebro);
+async function comecar() {
+  await carregarVoz();
+  await carregarCerebro();
+  if (!cerebroPronto) return;
+  status('Pronto! Toque uma vez na tela.');
 }
+
+let iniciou = false;
+document.addEventListener('click', async () => {
+  if (ehFlutuante) { carinho(); return; }
+  if (!cerebroPronto) { carinho(); return; }
+  if (iniciou) { carinho(); return; }
+  iniciou = true;
+  status('');
+  if (!nomeRobo) {
+    ocupado = true;
+    expressao('feliz');
+    await falar('Oi! Eu sou o seu robozinho e ainda nao tenho nome. Como voce quer me chamar?');
+    ocupado = false;
+  } else {
+    iniciarEscuta();
+    await falar('Oi, estou de volta! Pode falar comigo.');
+  }
+});
+
+if (!ehFlutuante) comecar();
 </script>
 </body>
 </html>
