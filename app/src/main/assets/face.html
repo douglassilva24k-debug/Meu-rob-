@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <style>
-  html, body { margin:0; height:100%; overflow:hidden; background:transparent; }
+  html, body { margin:0; height:100%; overflow:hidden; background:transparent; font-family:sans-serif; }
   body.tela { background:#000; }
   #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:14%; transition: transform .3s; }
   .olho { width:26vmin; height:34vmin; background:#fff; border-radius:30%; position:relative; transition: height .12s, transform .25s, border-radius .2s, width .2s; }
@@ -24,22 +24,43 @@
   .bravo .olho.e { transform: rotate(14deg); height:22vmin; }
   .bravo .olho.d { transform: rotate(-14deg); height:22vmin; }
   .amor .olho { background:#f36; clip-path: polygon(50% 100%,0 35%,15% 5%,50% 25%,85% 5%,100% 35%); border-radius:0; }
+  .pensando .olho { height:20vmin; }
+  .pensando #stage { transform: translate(-4vmin,-3vmin); }
   .falando #boca { opacity:1; animation: fala .25s infinite alternate; }
   @keyframes fala { from{ height:2vmin } to{ height:8vmin } }
+
+  #hud { position:absolute; left:0; right:0; bottom:0; padding:8px; display:none; }
+  body.cheia #hud { display:block; }
+  #status { color:#8f8; font-size:12px; text-align:center; min-height:16px; }
+  #linha { display:flex; gap:6px; margin-top:4px; }
+  #txt { flex:1; padding:10px; border-radius:8px; border:1px solid #444; background:#1c1c1c; color:#eee; font-size:14px; }
+  #hud button { padding:10px 14px; border:0; border-radius:8px; background:#2d8cff; color:#fff; font-size:14px; }
+  #mic.ouvindo { background:#e33; }
 </style>
 </head>
 <body class="tela">
 <div id="stage">
-  <div class="olho e" id="oe"></div>
-  <div class="olho d" id="od"></div>
+  <div class="olho e"></div>
+  <div class="olho d"></div>
 </div>
 <div id="boca"></div>
 <div class="lagrima" style="left:30%"></div>
 <div class="lagrima" style="left:62%"></div>
+
+<div id="hud">
+  <div id="status"></div>
+  <div id="linha">
+    <input id="txt" placeholder="Escreva aqui para conversar...">
+    <button id="enviar">Enviar</button>
+    <button id="mic">Falar</button>
+  </div>
+</div>
+
 <script>
+// ================= EXPRESSOES E ANIMACAO =================
 const b = document.body, stage = document.getElementById('stage');
-const estados = ['feliz','triste','chorando','dormindo','surpreso','bravo','amor','falando'];
-let atual = '', timer = null;
+const estados = ['feliz','triste','chorando','dormindo','surpreso','bravo','amor','falando','pensando'];
+let atual = '', timerCarinho = null, ocupado = false;
 
 function expressao(nome) {
   estados.forEach(e => b.classList.remove(e));
@@ -57,17 +78,148 @@ function piscar() {
 setInterval(() => { if (Math.random() < 0.7) piscar(); }, 3200);
 
 setInterval(() => {
-  if (atual === 'dormindo' || atual === 'chorando') return;
+  if (ocupado || atual === 'dormindo' || atual === 'chorando') return;
   olhar(Math.random() * 12 - 6, Math.random() * 6 - 3);
-  setTimeout(() => olhar(0, 0), 1400);
+  setTimeout(() => { if (!ocupado) olhar(0, 0); }, 1400);
 }, 5000);
 
 function carinho() {
+  if (ocupado) return;
   expressao('feliz');
-  clearTimeout(timer);
-  timer = setTimeout(() => expressao('neutro'), 3000);
+  clearTimeout(timerCarinho);
+  timerCarinho = setTimeout(() => expressao('neutro'), 3000);
 }
-document.addEventListener('click', carinho);
+document.getElementById('stage').addEventListener('click', carinho);
+
+// ================= MODO: TELA CHEIA OU FLUTUANTE =================
+// A bolinha flutuante e pequena. Na tela cheia mostramos o painel de conversa.
+const ehFlutuante = (window.innerWidth < 500 && window.innerHeight < 400);
+if (!ehFlutuante) b.classList.add('cheia');
+
+const statusEl = document.getElementById('status');
+function status(t) { statusEl.textContent = t; }
+
+// ================= VOZ (KOKORO) =================
+let tts = null, audioCtx = null, vozPronta = false;
+
+async function carregarVoz() {
+  try {
+    status('Baixando a voz... (so na primeira vez)');
+    const { KokoroTTS } = await import('https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm');
+    const usaGpu = !!navigator.gpu;
+    tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
+      dtype: usaGpu ? 'fp32' : 'q8',
+      device: usaGpu ? 'webgpu' : 'wasm'
+    });
+    vozPronta = true;
+  } catch (e) {
+    console.log(e);
+    status('Voz natural indisponivel neste aparelho. Usando a voz do Android.');
+  }
+}
+
+function vozPadrao(texto) {
+  return new Promise(res => {
+    try {
+      const u = new SpeechSynthesisUtterance(texto);
+      u.lang = 'pt-BR';
+      u.onend = res; u.onerror = res;
+      speechSynthesis.speak(u);
+    } catch (e) { res(); }
+  });
+}
+
+async function falar(texto) {
+  expressao('falando');
+  try {
+    if (vozPronta) {
+      const audio = await tts.generate(texto, { voice: 'pm_alex' });
+      const blob = audio.toBlob();
+      const url = URL.createObjectURL(blob);
+      const el = new Audio(url);
+      await new Promise(res => { el.onended = res; el.onerror = res; el.play().catch(res); });
+      URL.revokeObjectURL(url);
+    } else {
+      await vozPadrao(texto);
+    }
+  } catch (e) { console.log(e); }
+  expressao('neutro');
+}
+
+// ================= CEREBRO (WEBLLM) =================
+let engine = null, cerebroPronto = false;
+const MODELO = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
+const historico = [{
+  role: 'system',
+  content: 'Voce e um robozinho virtual, amigo do Douglas. Fale sempre em portugues do Brasil, de forma curta, calorosa e natural, em no maximo duas frases. Voce nao sabe noticias nem fatos recentes, e diz isso com honestidade quando perguntarem. No comeco de cada resposta, escreva entre colchetes UMA emocao entre: feliz, triste, surpreso, bravo, amor, neutro. Exemplo: [feliz] Que legal te ver!'
+}];
+
+async function carregarCerebro() {
+  try {
+    if (!navigator.gpu) throw new Error('sem WebGPU');
+    status('Baixando o cerebro... (so na primeira vez, pode demorar)');
+    const webllm = await import('https://esm.run/@mlc-ai/web-llm');
+    engine = await webllm.CreateMLCEngine(MODELO, {
+      initProgressCallback: p => status('Cerebro: ' + Math.round((p.progress || 0) * 100) + '%')
+    });
+    cerebroPronto = true;
+    status('Pronto! Pode conversar.');
+  } catch (e) {
+    console.log(e);
+    status('Este aparelho nao roda a inteligencia aqui (' + (e.message || e) + ').');
+  }
+}
+
+async function conversar(texto) {
+  if (!texto || ocupado) return;
+  if (!cerebroPronto) { status('O cerebro ainda nao esta pronto neste aparelho.'); return; }
+  ocupado = true;
+  expressao('pensando');
+  status('Pensando...');
+  historico.push({ role: 'user', content: texto });
+  try {
+    const r = await engine.chat.completions.create({ messages: historico, temperature: 0.8, max_tokens: 120 });
+    let resposta = (r.choices[0].message.content || '').trim();
+    historico.push({ role: 'assistant', content: resposta });
+    if (historico.length > 14) historico.splice(1, 2);
+    let emocao = 'neutro';
+    const m = resposta.match(/^\s*\[(\w+)\]\s*/);
+    if (m) { emocao = m[1].toLowerCase(); resposta = resposta.replace(m[0], ''); }
+    status('');
+    if (estados.indexOf(emocao) >= 0) expressao(emocao);
+    await falar(resposta);
+  } catch (e) {
+    console.log(e);
+    status('Erro ao pensar: ' + (e.message || e));
+    expressao('triste');
+  }
+  ocupado = false;
+}
+
+// ================= ENTRADA: TEXTO E MICROFONE =================
+const txt = document.getElementById('txt');
+document.getElementById('enviar').onclick = () => { const t = txt.value.trim(); txt.value = ''; conversar(t); };
+txt.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('enviar').click(); });
+
+const micBtn = document.getElementById('mic');
+const Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!Reconhecimento) {
+  micBtn.style.display = 'none';
+} else {
+  const rec = new Reconhecimento();
+  rec.lang = 'pt-BR';
+  rec.interimResults = false;
+  rec.onresult = e => conversar(e.results[0][0].transcript);
+  rec.onend = () => micBtn.classList.remove('ouvindo');
+  rec.onerror = () => { micBtn.classList.remove('ouvindo'); status('Nao consegui ouvir. Tente digitar.'); };
+  micBtn.onclick = () => { try { rec.start(); micBtn.classList.add('ouvindo'); status('Ouvindo...'); } catch (e) {} };
+}
+
+// ================= INICIO =================
+// So carrega voz e cerebro na tela cheia, para a bolinha flutuante ficar leve.
+if (!ehFlutuante) {
+  carregarVoz().then(carregarCerebro);
+}
 </script>
 </body>
 </html>
