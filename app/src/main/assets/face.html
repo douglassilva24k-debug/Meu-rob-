@@ -34,6 +34,8 @@
   @keyframes bambo { 0%,100% { transform: rotate(-7deg) translateX(-3vmin); } 50% { transform: rotate(7deg) translateX(3vmin); } }
   #status { position:absolute; left:0; right:0; bottom:4px; text-align:center; color:#6c6; font-size:11px; opacity:.85; pointer-events:none; }
 </style>
+<!-- Pre-carregamento do ONNX Runtime para suportar o Piper TTS sem erros de fetch -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.18.0/ort.min.js"></script>
 </head>
 <body class='tela'>
 <div id='stage'>
@@ -141,6 +143,9 @@ let piper = null, vozPronta = false;
 async function carregarVoz() {
   try {
     status('Baixando a voz (uns 63 MB, so na primeira vez)...');
+    if (typeof ort !== 'undefined' && ort.env && ort.env.wasm) {
+      ort.env.wasm.wasmPaths = 'https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.18.0/';
+    }
     piper = await import('https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/+esm');
     await piper.download(VOZ_PIPER, p => { if (p && p.total) status('Voz: ' + Math.round(p.loaded * 100 / p.total) + '%'); });
     vozPronta = true;
@@ -202,7 +207,6 @@ async function carregarCerebro() {
     tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5');
     tf.env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/';
     
-    // Lista de modelos para testar do mais leve ao alternativo caso ocorra falha de fetch
     const modelos = [
       'onnx-community/Qwen2.5-0.5B-Instruct',
       'Xenova/gemma-2b-it',
