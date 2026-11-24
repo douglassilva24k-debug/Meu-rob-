@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:transparent; }
+  body.tela { background:#000; }
+  #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:14%; transition: transform .3s; }
+  .olho { width:26vmin; height:34vmin; background:#fff; border-radius:30%; position:relative; transition: height .12s, transform .25s, border-radius .2s, width .2s; }
+  #boca { position:absolute; bottom:18%; left:50%; width:14vmin; height:7vmin; margin-left:-7vmin; border-bottom:1.6vmin solid #fff; border-radius:0 0 100% 100%; opacity:0; transition:opacity .2s; }
+  .lagrima { position:absolute; width:3vmin; height:5vmin; background:#6cf; border-radius:50%; opacity:0; top:60%; }
+  .piscando .olho { height:3vmin !important; }
+  .feliz .olho { border-radius:50% 50% 30% 30%; height:24vmin; }
+  .feliz #boca { opacity:1; }
+  .triste .olho { border-radius:30% 30% 50% 50%; }
+  .triste .olho.e { transform: rotate(-12deg); }
+  .triste .olho.d { transform: rotate(12deg); }
+  .chorando .olho { border-radius:30% 30% 50% 50%; }
+  .chorando .lagrima { opacity:1; animation: cai 1s infinite; }
+  @keyframes cai { from{ transform:translateY(0); opacity:1 } to{ transform:translateY(12vmin); opacity:0 } }
+  .dormindo .olho { height:3vmin; }
+  .surpreso .olho { width:32vmin; height:42vmin; border-radius:50%; }
+  .bravo .olho.e { transform: rotate(14deg); height:22vmin; }
+  .bravo .olho.d { transform: rotate(-14deg); height:22vmin; }
+  .amor .olho { background:#f36; clip-path: polygon(50% 100%,0 35%,15% 5%,50% 25%,85% 5%,100% 35%); border-radius:0; }
+  .falando #boca { opacity:1; animation: fala .25s infinite alternate; }
+  @keyframes fala { from{ height:2vmin } to{ height:8vmin } }
+</style>
+</head>
+<body class="tela">
+<div id="stage">
+  <div class="olho e" id="oe"></div>
+  <div class="olho d" id="od"></div>
+</div>
+<div id="boca"></div>
+<div class="lagrima" style="left:30%"></div>
+<div class="lagrima" style="left:62%"></div>
+<script>
+const b = document.body, stage = document.getElementById('stage');
+const estados = ['feliz','triste','chorando','dormindo','surpreso','bravo','amor','falando'];
+let atual = '', timer = null;
+
+function expressao(nome) {
+  estados.forEach(e => b.classList.remove(e));
+  if (nome && nome !== 'neutro') b.classList.add(nome);
+  atual = nome || '';
+}
+function olhar(x, y) { stage.style.transform = 'translate(' + x + 'vmin,' + y + 'vmin)'; }
+function fundo(comFundo) { b.classList.toggle('tela', comFundo); }
+
+function piscar() {
+  if (atual === 'dormindo') return;
+  b.classList.add('piscando');
+  setTimeout(() => b.classList.remove('piscando'), 140);
+}
+setInterval(() => { if (Math.random() < 0.7) piscar(); }, 3200);
+
+setInterval(() => {
+  if (atual === 'dormindo' || atual === 'chorando') return;
+  olhar(Math.random() * 12 - 6, Math.random() * 6 - 3);
+  setTimeout(() => olhar(0, 0), 1400);
+}, 5000);
+
+function carinho() {
+  expressao('feliz');
+  clearTimeout(timer);
+  timer = setTimeout(() => expressao('neutro'), 3000);
+}
+document.addEventListener('click', carinho);
+</script>
+</body>
+</html>
