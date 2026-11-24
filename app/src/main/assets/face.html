@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang='pt-BR'>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1, user-scalable=no'>
 <style>
   html, body { margin:0; height:100%; overflow:hidden; background:transparent; font-family:sans-serif; }
   body.tela { background:#000; }
   #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:14%; transition: transform .3s; }
-  .olho { width:26vmin; height:34vmin; background:#fff; border-radius:30%; position:relative; transition: height .12s, transform .25s, border-radius .2s, width .2s; }
+  .olho { width:26vmin; height:34vmin; background:#fff; border-radius:30%; transition: height .12s, transform .25s, border-radius .2s, width .2s; }
   #boca { position:absolute; bottom:18%; left:50%; width:14vmin; height:7vmin; margin-left:-7vmin; border-bottom:1.6vmin solid #fff; border-radius:0 0 100% 100%; opacity:0; transition:opacity .2s; }
   .lagrima { position:absolute; width:3vmin; height:5vmin; background:#6cf; border-radius:50%; opacity:0; top:60%; }
   .piscando .olho { height:3vmin !important; }
@@ -25,28 +25,45 @@
   .bravo .olho.d { transform: rotate(-14deg); height:22vmin; }
   .amor .olho { background:#f36; clip-path: polygon(50% 100%,0 35%,15% 5%,50% 25%,85% 5%,100% 35%); border-radius:0; }
   .pensando .olho { height:20vmin; }
-  .pensando #stage { transform: translate(-4vmin,-3vmin); }
   .ouvindo .olho { box-shadow: 0 0 3vmin #4af; }
-  .falando #boca { opacity:1; animation: fala .25s infinite alternate; }
+  .fala #boca { opacity:1; animation: fala .25s infinite alternate; }
   @keyframes fala { from{ height:2vmin } to{ height:8vmin } }
-  #status { position:absolute; left:0; right:0; bottom:4px; text-align:center; color:#6c6; font-size:11px; opacity:.8; pointer-events:none; }
+  .tonto .olho { width:22vmin; height:22vmin; border-radius:50%; background:repeating-conic-gradient(#fff 0 25deg, #000 25deg 50deg); animation: girar .8s linear infinite; }
+  .tonto #stage { animation: bambo 1s ease-in-out infinite; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  @keyframes bambo { 0%,100% { transform: rotate(-7deg) translateX(-3vmin); } 50% { transform: rotate(7deg) translateX(3vmin); } }
+  #status { position:absolute; left:0; right:0; bottom:4px; text-align:center; color:#6c6; font-size:11px; opacity:.85; pointer-events:none; }
 </style>
 </head>
-<body class="tela">
-<div id="stage">
-  <div class="olho e"></div>
-  <div class="olho d"></div>
+<body class='tela'>
+<div id='stage'>
+  <div class='olho e'></div>
+  <div class='olho d'></div>
 </div>
-<div id="boca"></div>
-<div class="lagrima" style="left:30%"></div>
-<div class="lagrima" style="left:62%"></div>
-<div id="status"></div>
+<div id='boca'></div>
+<div class='lagrima' style='left:30%'></div>
+<div class='lagrima' style='left:62%'></div>
+<div id='status'></div>
 
 <script>
-// ================= EXPRESSOES E ANIMACAO =================
+// ================= UTILIDADES =================
 const b = document.body, stage = document.getElementById('stage');
-const estados = ['feliz','triste','chorando','dormindo','surpreso','bravo','amor','falando','pensando'];
-let atual = '', timerCarinho = null, ocupado = false;
+const statusEl = document.getElementById('status');
+function status(t) { statusEl.textContent = t; }
+function msgErro(e) { return (e && (e.message || e.name)) ? (e.message || e.name) : String(e); }
+function tirarAcentos(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+function comTempo(promessa, ms, rotulo) {
+  return new Promise((ok, falha) => {
+    const t = setTimeout(() => falha(new Error(rotulo + ' demorou mais de ' + Math.round(ms / 1000) + 's')), ms);
+    promessa.then(v => { clearTimeout(t); ok(v); }, e => { clearTimeout(t); falha(e); });
+  });
+}
+window.addEventListener('unhandledrejection', e => status('Erro: ' + msgErro(e.reason)));
+window.addEventListener('error', e => status('Erro: ' + e.message));
+
+// ================= EXPRESSOES E ANIMACAO =================
+const estados = ['feliz','triste','chorando','dormindo','surpreso','bravo','amor','pensando','tonto'];
+let atual = '', timerCarinho = null, tontoTimer = null, ocupado = false;
 
 function expressao(nome) {
   estados.forEach(e => b.classList.remove(e));
@@ -56,47 +73,81 @@ function expressao(nome) {
 function olhar(x, y) { stage.style.transform = 'translate(' + x + 'vmin,' + y + 'vmin)'; }
 function fundo(comFundo) { b.classList.toggle('tela', comFundo); }
 function piscar() {
-  if (atual === 'dormindo') return;
+  if (atual === 'dormindo' || atual === 'tonto') return;
   b.classList.add('piscando');
   setTimeout(() => b.classList.remove('piscando'), 140);
 }
 setInterval(() => { if (Math.random() < 0.7) piscar(); }, 3200);
 setInterval(() => {
-  if (ocupado || atual === 'dormindo' || atual === 'chorando') return;
+  if (ocupado || atual === 'dormindo' || atual === 'chorando' || atual === 'tonto') return;
   olhar(Math.random() * 12 - 6, Math.random() * 6 - 3);
   setTimeout(() => { if (!ocupado) olhar(0, 0); }, 1400);
 }, 5000);
 function carinho() {
-  if (ocupado) return;
+  if (ocupado || atual === 'tonto') return;
   expressao('feliz');
   clearTimeout(timerCarinho);
   timerCarinho = setTimeout(() => expressao('neutro'), 3000);
 }
 
-const statusEl = document.getElementById('status');
-function status(t) { statusEl.textContent = t; }
-const ehFlutuante = (window.innerWidth < 500 && window.innerHeight < 400);
+function emocaoDe(texto) {
+  const t = tirarAcentos(texto);
+  if (/desculp|sinto muito|triste|infelizmente/.test(t)) return 'triste';
+  if (/amo|carinho|querido|amigo|fofo/.test(t)) return 'amor';
+  if (/nossa|uau|caramba|serio/.test(t)) return 'surpreso';
+  if (/raiva|irritad|chato/.test(t)) return 'bravo';
+  if (/!|legal|otimo|que bom|feliz|haha|kkk/.test(t)) return 'feliz';
+  return 'neutro';
+}
+
+// ================= SENSOR: SACUDIR = TONTO =================
+let sensorVivo = false, picos = [], ultimoPico = 0;
+function efeito(nome) {
+  try { const a = new Audio('sons/' + nome + '.mp3'); a.play().catch(() => {}); } catch (e) {}
+}
+function ficarTonto() {
+  if (ocupado || atual === 'tonto') return;
+  clearTimeout(timerCarinho);
+  expressao('tonto');
+  efeito('tonto');
+  clearTimeout(tontoTimer);
+  tontoTimer = setTimeout(() => expressao('neutro'), 4500);
+}
+window.addEventListener('devicemotion', e => {
+  const a = e.accelerationIncludingGravity;
+  if (!a) return;
+  sensorVivo = true;
+  const x = a.x || 0, y = a.y || 0, z = a.z || 0;
+  const forca = Math.abs(Math.sqrt(x * x + y * y + z * z) - 9.8);
+  const t = Date.now();
+  if (forca > 12 && t - ultimoPico > 120) {
+    ultimoPico = t;
+    picos.push(t);
+    picos = picos.filter(p => t - p < 1500);
+    if (picos.length >= 4) { picos = []; ficarTonto(); }
+  }
+});
+setTimeout(() => { if (!sensorVivo && !statusEl.textContent) status('O sensor de movimento nao respondeu neste aparelho.'); }, 8000);
 
 // ================= NOME DO ROBO =================
-let nomeRobo = localStorage.getItem('nomeRobo') || '';
+const ehFlutuante = (window.innerWidth < 500 && window.innerHeight < 400);
+let nomeRobo = '';
+try { nomeRobo = localStorage.getItem('nomeRobo') || ''; } catch (e) {}
 
-function tirarAcentos(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
-
-// ================= VOZ (KOKORO) =================
-let tts = null, vozPronta = false;
+// ================= VOZ (PIPER, PORTUGUES) =================
+const VOZ_PIPER = 'pt_BR-faber-medium';
+let piper = null, vozPronta = false;
 
 async function carregarVoz() {
   try {
-    status('Baixando a voz... (so na primeira vez)');
-    const { KokoroTTS } = await import('https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm');
-    tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
-      dtype: 'q8',
-      device: 'wasm'
-    });
+    status('Baixando a voz (uns 63 MB, so na primeira vez)...');
+    piper = await import('https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.5/+esm');
+    await piper.download(VOZ_PIPER, p => { if (p && p.total) status('Voz: ' + Math.round(p.loaded * 100 / p.total) + '%'); });
     vozPronta = true;
   } catch (e) {
     console.log(e);
-    status('Voz natural indisponivel (' + (e.message || e) + '). Usando a voz do Android.');
+    status('Voz natural falhou (' + msgErro(e) + '). Vou usar a voz do Android.');
+    await new Promise(r => setTimeout(r, 3500));
   }
 }
 
@@ -107,62 +158,98 @@ function vozPadrao(texto) {
       u.lang = 'pt-BR';
       u.onend = res; u.onerror = res;
       speechSynthesis.speak(u);
+      setTimeout(res, 20000);
     } catch (e) { res(); }
   });
 }
 
-async function falar(texto) {
-  pararEscuta();
-  expressao('falando');
-  try {
-    if (vozPronta) {
-      const audio = await tts.generate(texto, { voice: 'pm_alex' });
-      const url = URL.createObjectURL(audio.toBlob());
+async function tocarParte(parte) {
+  if (vozPronta) {
+    try {
+      status('Gerando a voz...');
+      const wav = await comTempo(piper.predict({ text: parte, voiceId: VOZ_PIPER }), 40000, 'A voz');
+      status('');
+      const url = URL.createObjectURL(wav);
       const el = new Audio(url);
       await new Promise(res => { el.onended = res; el.onerror = res; el.play().catch(res); });
       URL.revokeObjectURL(url);
-    } else {
-      await vozPadrao(texto);
+      return;
+    } catch (e) {
+      console.log(e);
+      status('Voz natural falhou (' + msgErro(e) + '). Usando a do Android.');
+      vozPronta = false;
     }
-  } catch (e) { console.log(e); }
+  }
+  await vozPadrao(parte);
+}
+
+async function falar(texto) {
+  pararEscuta();
+  b.classList.add('fala');
+  const partes = texto.split(/(?<=[.!?])\s+/).filter(p => p.trim());
+  for (const p of partes) await tocarParte(p);
+  b.classList.remove('fala');
   expressao('neutro');
   iniciarEscuta();
 }
 
 // ================= CEREBRO (TRANSFORMERS.JS, PROCESSADOR) =================
-let gerador = null, cerebroPronto = false;
-let historico = [];
-
-function promptSistema() {
-  return 'Voce e um robozinho virtual chamado ' + nomeRobo + ', amigo do Douglas. Fale sempre em portugues do Brasil, de forma curta, calorosa e natural, em no maximo duas frases curtas. Voce nao sabe noticias nem fatos recentes, e diz isso com honestidade. No comeco de cada resposta escreva entre colchetes UMA emocao entre: feliz, triste, surpreso, bravo, amor, neutro. Exemplo: [feliz] Que legal te ver!';
-}
+let tf = null, gerador = null, cerebroPronto = false, turnos = [], modoProxy = false, tempoTeste = 0;
 
 async function carregarCerebro() {
   try {
-    status('Baixando o cerebro... (so na primeira vez, pode demorar)');
-    const tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5');
-    gerador = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
-      dtype: 'q4',
-      device: 'wasm',
-      progress_callback: p => { if (p.status === 'progress') status('Cerebro: ' + Math.round(p.progress || 0) + '%'); }
-    });
+    status('Baixando o cerebro (uns 400 MB, so na primeira vez)...');
+    tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5');
+    let ultimoErro = null;
+    for (const proxy of [true, false]) {
+      try {
+        tf.env.backends.onnx.wasm.proxy = proxy;
+        gerador = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
+          dtype: 'q4',
+          device: 'wasm',
+          progress_callback: p => { if (p.status === 'progress') status('Cerebro: ' + Math.round(p.progress || 0) + '%'); }
+        });
+        modoProxy = proxy;
+        ultimoErro = null;
+        break;
+      } catch (e) { ultimoErro = e; console.log(e); }
+    }
+    if (!gerador) throw ultimoErro;
+    status('Testando o cerebro...');
+    const t0 = Date.now();
+    await comTempo(gerador([{ role: 'user', content: 'Oi' }], { max_new_tokens: 4, do_sample: false }), 150000, 'O teste do cerebro');
+    tempoTeste = Math.round((Date.now() - t0) / 1000);
     cerebroPronto = true;
-    status('');
   } catch (e) {
     console.log(e);
-    status('Cerebro nao carregou (' + (e.message || e) + ')');
+    status('Cerebro falhou (' + msgErro(e) + ')');
   }
 }
 
-async function pensar(textoUsuario) {
-  if (!historico.length || historico[0].role !== 'system') historico.unshift({ role: 'system', content: promptSistema() });
-  historico.push({ role: 'user', content: textoUsuario });
-  const saida = await gerador(historico, { max_new_tokens: 80, temperature: 0.8, do_sample: true });
-  const msgs = saida[0].generated_text;
-  let resposta = (msgs[msgs.length - 1].content || '').trim();
-  historico.push({ role: 'assistant', content: resposta });
-  if (historico.length > 13) historico.splice(1, 2);
-  return resposta;
+async function pensar(pergunta) {
+  turnos.push({ role: 'user', content: pergunta });
+  if (turnos.length > 6) turnos = turnos.slice(-6);
+  const msgs = [{ role: 'system', content: 'Voce e ' + nomeRobo + ', um robozinho amigo do Douglas. Responda em portugues do Brasil, com uma frase curta.' }].concat(turnos);
+  let pedacos = 0;
+  const t0 = Date.now();
+  const relogio = setInterval(() => {
+    status('Pensando... ' + Math.round((Date.now() - t0) / 1000) + 's' + (pedacos ? ' (' + pedacos + ' pedacos)' : ''));
+  }, 1000);
+  const opcoes = { max_new_tokens: 40, do_sample: true, temperature: 0.7, top_k: 40, repetition_penalty: 1.1 };
+  try { if (tf.TextStreamer) opcoes.streamer = new tf.TextStreamer(gerador.tokenizer, { skip_prompt: true, skip_special_tokens: true, callback_function: () => { pedacos++; } }); } catch (e) {}
+  try {
+    const saida = await comTempo(gerador(msgs, opcoes), 150000, 'A resposta');
+    const m = saida[0].generated_text;
+    const resposta = (m[m.length - 1].content || '').trim();
+    turnos.push({ role: 'assistant', content: resposta });
+    return resposta;
+  } finally { clearInterval(relogio); }
+}
+
+function limpar(r) {
+  let t = r.replace(/[^\p{L}\p{N}\s.,!?;:'()-]/gu, ' ').replace(/\s+/g, ' ').trim();
+  t = t.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+  return t || 'Hmm, nao sei o que dizer.';
 }
 
 // ================= CONVERSA =================
@@ -171,43 +258,37 @@ async function tratarFala(frase) {
   const limpa = frase.trim();
   if (!limpa) return;
 
-  // Fase 1: ainda nao tem nome. A primeira fala e o nome escolhido.
   if (!nomeRobo) {
     ocupado = true;
-    let nome = limpa.replace(/[.,!?]/g, '').replace(/^(pode me chamar de|pode te chamar de|te chamar de|seu nome e|seu nome é|vou te chamar de|chamo voce de|chamo você de|o nome e|o nome é|se chama|chama)\s+/i, '').trim();
+    let nome = limpa.replace(/[.,!?]/g, '').replace(/^(pode me chamar de|te chamar de|seu nome e|seu nome é|vou te chamar de|o nome e|o nome é|se chama|chama)\s+/i, '').trim();
     nome = nome.split(' ').slice(0, 2).join(' ');
     nome = nome.charAt(0).toUpperCase() + nome.slice(1);
     nomeRobo = nome;
-    localStorage.setItem('nomeRobo', nomeRobo);
+    try { localStorage.setItem('nomeRobo', nomeRobo); } catch (e) {}
     expressao('feliz');
-    await falar('Gostei! Pode me chamar de ' + nomeRobo + '. Quando quiser falar comigo, comece dizendo meu nome.');
+    try { await falar('Gostei! Pode me chamar de ' + nomeRobo + '. Quando quiser falar comigo, comece dizendo meu nome.'); } catch (e) {}
     ocupado = false;
     return;
   }
 
-  // Fase 2: so responde se a frase comecar com o nome dele.
   const norm = tirarAcentos(limpa);
-  const nomeNorm = tirarAcentos(nomeRobo);
-  const idx = norm.indexOf(nomeNorm);
+  const idx = norm.indexOf(tirarAcentos(nomeRobo));
   if (idx < 0 || idx > 12) return;
+  if (!cerebroPronto) { status('O cerebro nao esta pronto.'); return; }
   let pergunta = limpa.slice(idx + nomeRobo.length).replace(/^[\s,.:!?-]+/, '');
   if (!pergunta) pergunta = 'Oi!';
 
   ocupado = true;
   pararEscuta();
   expressao('pensando');
-  status('Pensando...');
   try {
-    let resposta = await pensar(pergunta);
-    let emocao = 'neutro';
-    const m = resposta.match(/^\s*\[(\w+)\]\s*/);
-    if (m) { emocao = m[1].toLowerCase(); resposta = resposta.replace(m[0], ''); }
+    const resposta = limpar(await pensar(pergunta));
     status('');
-    if (estados.indexOf(emocao) >= 0 && emocao !== 'neutro') expressao(emocao);
+    expressao(emocaoDe(resposta));
     await falar(resposta);
   } catch (e) {
     console.log(e);
-    status('Erro ao pensar (' + (e.message || e) + ')');
+    status('Erro ao pensar (' + msgErro(e) + ')');
     expressao('triste');
     iniciarEscuta();
   }
@@ -217,7 +298,6 @@ async function tratarFala(frase) {
 // ================= ESCUTA CONTINUA =================
 const Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, escutando = false, querEscutar = false;
-
 function iniciarEscuta() {
   querEscutar = true;
   if (!rec || escutando) return;
@@ -227,7 +307,6 @@ function pararEscuta() {
   querEscutar = false;
   if (rec && escutando) { try { rec.stop(); } catch (e) {} }
 }
-
 if (Reconhecimento) {
   rec = new Reconhecimento();
   rec.lang = 'pt-BR';
@@ -249,25 +328,22 @@ async function comecar() {
   await carregarVoz();
   await carregarCerebro();
   if (!cerebroPronto) return;
-  status('Pronto! Toque uma vez na tela.');
+  status('Pronto! (teste do cerebro: ' + tempoTeste + 's' + (modoProxy ? ', modo rapido' : '') + '). Toque uma vez na tela.');
 }
 
 let iniciou = false;
 document.addEventListener('click', async () => {
-  if (ehFlutuante) { carinho(); return; }
-  if (!cerebroPronto) { carinho(); return; }
-  if (iniciou) { carinho(); return; }
+  if (ehFlutuante || !cerebroPronto || iniciou) { carinho(); return; }
   iniciou = true;
   status('');
+  ocupado = true;
   if (!nomeRobo) {
-    ocupado = true;
     expressao('feliz');
     await falar('Oi! Eu sou o seu robozinho e ainda nao tenho nome. Como voce quer me chamar?');
-    ocupado = false;
   } else {
-    iniciarEscuta();
     await falar('Oi, estou de volta! Pode falar comigo.');
   }
+  ocupado = false;
 });
 
 if (!ehFlutuante) comecar();
