@@ -198,24 +198,38 @@ let tf = null, gerador = null, cerebroPronto = false, turnos = [], modoProxy = f
 
 async function carregarCerebro() {
   try {
-    status('Baixando o cerebro (uns 400 MB, so na primeira vez)...');
+    status('Baixando o cerebro (so na primeira vez)...');
     tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5');
     tf.env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/dist/';
+    
+    // Lista de modelos para testar do mais leve ao alternativo caso ocorra falha de fetch
+    const modelos = [
+      'onnx-community/Qwen2.5-0.5B-Instruct',
+      'Xenova/gemma-2b-it',
+      'Xenova/Qwen1.5-0.5B-Chat'
+    ];
+
     let ultimoErro = null;
-    for (const proxy of [false, true]) {
-      try {
-        tf.env.backends.onnx.wasm.proxy = proxy;
-        gerador = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
-          dtype: 'q4',
-          device: 'wasm',
-          progress_callback: p => { if (p.status === 'progress') status('Cerebro: ' + Math.round(p.progress || 0) + '%'); }
-        });
-        modoProxy = proxy;
-        ultimoErro = null;
-        break;
-      } catch (e) { ultimoErro = e; console.log(e); }
+    for (const modelo of modelos) {
+      for (const proxy of [false, true]) {
+        try {
+          tf.env.backends.onnx.wasm.proxy = proxy;
+          status('Carregando ' + modelo + '...');
+          gerador = await tf.pipeline('text-generation', modelo, {
+            dtype: 'q4',
+            device: 'wasm',
+            progress_callback: p => { if (p.status === 'progress') status('Cerebro (' + Math.round(p.progress || 0) + '%)'); }
+          });
+          modoProxy = proxy;
+          ultimoErro = null;
+          break;
+        } catch (e) { ultimoErro = e; console.log(e); }
+      }
+      if (gerador) break;
     }
+
     if (!gerador) throw ultimoErro;
+
     status('Testando o cerebro...');
     const t0 = Date.now();
     await comTempo(gerador([{ role: 'user', content: 'Oi' }], { max_new_tokens: 4, do_sample: false }), 150000, 'O teste do cerebro');
